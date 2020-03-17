@@ -41,7 +41,7 @@
   - set_fact:
       ls_d: "{{ ls_d | combine({'subnet': ls_d_subnet.stdout|regex_search('subnet=\"([0-9a-f\\:\\.\\/]*)\"','\\1') | first }) }}"
   - set_fact:
-      lr: "{{ lr | combine({'port_downlink': {'ip4': (ls_d.subnet|ipaddr('net')|ipaddr('1')) } }) }}"
+      lr: "{{ lr | combine({'port_downlink': lr.port_downlink | combine({'ip4': (ls_d.subnet|ipaddr('net')|ipaddr('1')) }) }) }}"
 
   - name: Find internal (aka transit) subnet from 'uplink' LSwitch
     shell: ovn-nbctl get Logical_Switch {{ls_u.name}} other_config
@@ -49,7 +49,7 @@
   - set_fact:
       ls_u: "{{ ls_u | combine({'subnet': ls_u_subnet.stdout|regex_search('subnet=\"([0-9a-f\\:\\.\\/]*)\"','\\1') | first }) }}"
   - set_fact:
-      lr: "{{ lr | combine({'port_uplink': {'ip4': (ls_u.subnet|ipaddr('net')|ipaddr('1')) }, 'gateway': { 'ip4': (ls_u.subnet|ipaddr('net')|ipaddr('4')|ipaddr('address')) } }) }}"
+      lr: "{{ lr | combine({'port_uplink': lr.port_uplink | combine({'ip4': (ls_u.subnet|ipaddr('net')|ipaddr('1')) }), 'gateway': { 'ip4': (ls_u.subnet|ipaddr('net')|ipaddr('4')|ipaddr('address')) } }) }}"
 
   - name: Create Logical_Router IGW
     shell: ovn-nbctl lr-add {{lr.name}}
@@ -73,5 +73,5 @@
   - shell: ovn-nbctl lsp-set-options {{ls_d.port_router.name}} router-port={{lr.port_downlink.name}}
 
   - name: Create static route to outside world on Logical_Router
-    shell: ovn-nbctl lr-route-add {{lr.name}} "0.0.0.0/0" {{gw_ip4}}
+    shell: ovn-nbctl lr-route-add {{lr.name}} "0.0.0.0/0" {{lr.gateway.ip4}}
 
