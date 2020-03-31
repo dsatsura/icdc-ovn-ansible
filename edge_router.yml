@@ -1,0 +1,148 @@
+---
+- hosts: hosted_engine
+  vars:
+    location: 'zby'
+    uplink_name: 'icdc_edge'
+    mac_prefix: "1c:dc:26:20"
+    mac_serial_base: 1
+    vpn_subnet: "10.254.64.0/24"
+    router_name: 'edge'
+    net:
+    - ipmi
+    - mgmt
+    - san
+    - display
+    - migration
+    - os_master
+    - os_lb
+    - os_worker
+    lr:
+      name: "{{location}}_{{router_name}}"
+    ls_u:
+      shortname: "{{location}}_{{uplink_name}}"
+  tasks:
+  - name: Find LSwitch name for uplink
+    shell: ovn-nbctl ls-list | grep "{{ ls_u.shortname }}"
+    register: ls_list
+  - set_fact:
+      ls_u: "{{ ls_u | combine(
+        { 'name': ls_list.stdout_lines | first | regex_search('\\((.*)\\)$', '\\1') | first,
+          'router_port': {
+            'name': ls_u.shortname + '-' + router_name
+          }
+        })
+      }}"
+
+  - name: Find subnet for 'uplink' LSwitch
+    shell: ovn-nbctl get Logical_Switch {{ls_u.name}} other_config
+    register: ls_u_subnet
+  - set_fact:
+      ls_u: "{{ ls_u | combine({'subnet': ls_u_subnet.stdout|regex_search('subnet=\"([0-9a-f\\:\\.\\/]*)\"','\\1') | first }) }}"
+  - set_fact:
+      lr: "{{ lr | combine(
+        { 'uplink_port': {
+            'name': lr.name + '-' + uplink_name,
+            'ip4': ls_u.subnet | ipaddr('net') | ipaddr('4') ,
+            'mac': mac_prefix + ':00:00',
+          },
+          'gateway': {
+            'ip4': ls_u.subnet | ipaddr('net') | ipaddr('1') | ipaddr('address')
+          }
+        })
+      }}"
+
+  - name: Generate shortnames for downlink LSwitches
+    set_fact:
+      tmp1: "{{ tmp1 + [
+        { 'minimal_name': item,
+          'shortname': (location + '_' + item) }
+      ] }}"
+    vars:
+      tmp1: []
+    with_items: "{{ net }}"
+  - set_fact: net="{{ tmp1 }}"
+
+  - name: Find full names for 'downlink' LSwitches
+    shell: ovn-nbctl ls-list | grep "{{ item.shortname }}"
+    with_items: "{{ net }}"
+    register: ls_list
+
+  - name: Store full names of 'downlink' LSwitches
+    set_fact:
+      tmp2: "{{ tmp2 + [ net[item.0] | combine(
+        { 'name': (item.1.stdout_lines | first | regex_search('\\((.*)\\)$', '\\1') | first),
+          'router_port': {
+            'name': net[item.0].shortname + '-' + router_name
+          }
+        })
+      ] }}"
+    vars:
+      tmp2: []
+    with_indexed_items: "{{ ls_list.results }}"
+  - set_fact: net="{{ tmp2 }}"
+
+  - name: Find subnets for 'downlink' LSwitches
+    shell: ovn-nbctl get Logical_Switch {{item.name}} other_config
+    with_items: "{{ net }}"
+    register: ls_subnets
+
+  - name: Store subnets of downlink LSwitches
+    set_fact:
+      tmp3: "{{ tmp3 + [
+        net[item.0] | combine({ 'subnet': item.1.stdout|regex_search('subnet=\"([0-9a-f\\:\\.\\/]*)\"','\\1') | first })
+      ] }}"
+    vars:
+      tmp3: []
+    with_indexed_items: "{{ ls_subnets.results }}"
+  - set_fact: net="{{ tmp3 }}"
+  
+  - name: Store IP of LRouter port for each downlink LSwitches
+    set_fact:
+      tmp4: "{{ tmp4 + [
+        { 'name': location + '_' + router_name + '-' + item.1.minimal_name,
+          'ip4': item.1.subnet | ipaddr('net') | ipaddr('4'),
+          'mac': '%s:00:%02x' % (mac_prefix, mac_serial_base + item.0)
+        }
+      ] }}"
+    vars:
+      tmp4: []
+    with_indexed_items: "{{ net }}"
+  - set_fact:
+      lr: "{{ lr | combine({'downlink_ports': tmp4}) }}"
+
+  - debug: var=net
+  - debug: var=lr
+
+  - name: Create Logical_Router IGW
+    shell: ovn-nbctl lr-add {{lr.name}}
+
+  - name: Create Logical_Router_Port for 'uplink'
+    shell: ovn-nbctl lrp-add {{lr.name}} {{lr.uplink_port.name}} {{lr.uplink_port.mac}} {{lr.uplink_port.ip4}}
+
+  - name: Create Logical_Router_Port for 'downlink'
+    shell: ovn-nbctl lrp-add {{lr.name}} {{item.name}} {{item.mac}} {{item.ip4}}
+    with_items: "{{ lr.downlink_ports }}"
+
+  - name: Create Logical_Switch_Port in 'uplink' Switch
+    shell: ovn-nbctl lsp-add {{ls_u.name}} {{ls_u.router_port.name}}
+  - shell: ovn-nbctl lsp-set-type {{ls_u.router_port.name}} router
+  - shell: ovn-nbctl lsp-set-addresses {{ls_u.router_port.name}} {{lr.uplink_port.mac}}
+  - shell: ovn-nbctl lsp-set-options {{ls_u.router_port.name}} router-port={{lr.uplink_port.name}}
+
+  - name: Create Logical_Switch_Port in 'downlink' Switch
+    shell: ovn-nbctl lsp-add {{item.name}} {{item.router_port.name}}
+    with_items: "{{ net }}"
+  - name: Set type for router LS_Port in 'downlink' LSwitches
+    shell: ovn-nbctl lsp-set-type {{item.router_port.name}} router
+    with_items: "{{ net }}"
+  - name: Set MAC address for router LS_Port in 'downlink' LSwitches
+    shell: ovn-nbctl lsp-set-addresses {{item.1.router_port.name}} {{lr.downlink_ports[item.0].mac}}
+    with_indexed_items: "{{ net }}"
+  - shell: ovn-nbctl lsp-set-options {{item.1.router_port.name}} router-port={{lr.downlink_ports[item.0].name}}
+    with_indexed_items: "{{ net }}"
+    
+  - name: Create static route to outside world on Logical_Router
+    shell: ovn-nbctl lr-route-add {{lr.name}} "0.0.0.0/0" {{lr.gateway.ip4}}
+
+  - name: Create static route for Team VPN server on Logical_Router
+    shell: ovn-nbctl lr-route-add {{lr.name}} {{vpn_subnet}} {{ ls_u.subnet | ipaddr('net') | ipaddr('5') | ipaddr('address') }}

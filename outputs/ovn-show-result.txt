@@ -1,0 +1,74 @@
+6,9d5
+<     port zby_display-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:04"]
+<         router-port: zby_edge-display
+15,18d10
+<     port zby_os_master-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:06"]
+<         router-port: zby_edge-os_master
+33,36d24
+<     port zby_ipmi-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:01"]
+<         router-port: zby_edge-ipmi
+56,59d43
+<     port zby_san-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:03"]
+<         router-port: zby_edge-san
+65,68d48
+<     port zby_mgmt-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:02"]
+<         router-port: zby_edge-mgmt
+74,77d53
+<     port zby_os_worker-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:08"]
+<         router-port: zby_edge-os_worker
+85,88d60
+<     port zby_icdc_edge-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:00"]
+<         router-port: zby_edge-icdc_edge
+90,93d61
+<     port zby_os_lb-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:07"]
+<         router-port: zby_edge-os_lb
+99,102d66
+<     port zby_migration-edge
+<         type: router
+<         addresses: ["1c:dc:26:20:00:05"]
+<         router-port: zby_edge-migration
+114,141d77
+< router 7c15ad97-ba85-4fe0-a153-cf86324bb3da (zby_edge)
+<     port zby_edge-icdc_edge
+<         mac: "1c:dc:26:20:00:00"
+<         networks: ["10.254.20.4/24"]
+<     port zby_edge-migration
+<         mac: "1c:dc:26:20:00:05"
+<         networks: ["10.254.5.4/24"]
+<     port zby_edge-os_worker
+<         mac: "1c:dc:26:20:00:08"
+<         networks: ["10.254.10.4/24"]
+<     port zby_edge-os_lb
+<         mac: "1c:dc:26:20:00:07"
+<         networks: ["10.254.9.4/24"]
+<     port zby_edge-ipmi
+<         mac: "1c:dc:26:20:00:01"
+<         networks: ["10.254.0.4/24"]
+<     port zby_edge-mgmt
+<         mac: "1c:dc:26:20:00:02"
+<         networks: ["10.254.1.4/24"]
+<     port zby_edge-display
+<         mac: "1c:dc:26:20:00:04"
+<         networks: ["10.254.4.4/24"]
+<     port zby_edge-os_master
+<         mac: "1c:dc:26:20:00:06"
+<         networks: ["10.254.8.4/24"]
+<     port zby_edge-san
+<         mac: "1c:dc:26:20:00:03"
+<         networks: ["10.254.2.4/24"]
